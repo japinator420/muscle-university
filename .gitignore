@@ -1,0 +1,17 @@
+# Variables de entorno y archivos locales sensibles
+.env
+*.local.php
+
+# Dependencias de Node y PHP
+node_modules/
+vendor/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs y archivos temporales
+*.log
+*.tmp
