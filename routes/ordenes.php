@@ -10,6 +10,7 @@ $controlador = new OrdenController($modelo);
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $id = isset($_GET['id']) ? (int) $_GET['id'] : null;
 $idCliente = isset($_GET['id_cliente']) ? (int) $_GET['id_cliente'] : null;
+$accion = $_GET['accion'] ?? null;
 
 $cuerpoRaw = file_get_contents('php://input');
 $cuerpo = [];
@@ -37,6 +38,19 @@ switch ($metodo) {
         break;
 
     case 'POST':
+        if ($accion === 'agregar_detalle') {
+            if ($id === null) {
+                http_response_code(400);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'Debe indicar el parámetro id para agregar detalles.',
+                ], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            $controlador->agregarDetalle($id, $cuerpo);
+            break;
+        }
         $controlador->crear($cuerpo);
         break;
 
@@ -50,6 +64,10 @@ switch ($metodo) {
                 'mensaje' => 'Debe indicar el parámetro id para actualizar.',
             ], JSON_UNESCAPED_UNICODE);
             return;
+        }
+        if ($accion === 'agregar_detalle') {
+            $controlador->agregarDetalle($id, $cuerpo);
+            break;
         }
         $controlador->actualizar($id, $cuerpo);
         break;

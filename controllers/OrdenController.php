@@ -77,63 +77,9 @@ class OrdenController
         }
 
         $itemsRaw = $entrada['items'] ?? [];
-        if (!is_array($itemsRaw)) {
-            $this->responderJson(400, [
-                'ok' => false,
-                'mensaje' => 'items debe ser un arreglo.',
-            ]);
+        $itemsResueltos = $this->resolverItems($itemsRaw);
+        if ($itemsResueltos === null) {
             return;
-        }
-
-        $itemsResueltos = [];
-        foreach ($itemsRaw as $indice => $item) {
-            if (!is_array($item)) {
-                $this->responderJson(400, [
-                    'ok' => false,
-                    'mensaje' => "El elemento en items[$indice] no es válido.",
-                ]);
-                return;
-            }
-
-            $idProdRaw = $item['id_producto'] ?? null;
-            $cantRaw = $item['cantidad'] ?? null;
-
-            if (!is_numeric($idProdRaw) || (int) $idProdRaw <= 0) {
-                $this->responderJson(400, [
-                    'ok' => false,
-                    'mensaje' => "id_producto inválido en items[$indice].",
-                ]);
-                return;
-            }
-            if (!is_numeric($cantRaw) || (int) $cantRaw <= 0 || (int) $cantRaw != $cantRaw) {
-                $this->responderJson(400, [
-                    'ok' => false,
-                    'mensaje' => "cantidad debe ser un entero mayor que 0 en items[$indice].",
-                ]);
-                return;
-            }
-
-            $idProducto = (int) $idProdRaw;
-            $cantidad = (int) $cantRaw;
-
-            $producto = $this->modelo->obtenerProductoActivo($idProducto);
-            if (!$producto) {
-                $this->responderJson(400, [
-                    'ok' => false,
-                    'mensaje' => "El producto con id_producto $idProducto no existe.",
-                ]);
-                return;
-            }
-
-            $precioUnitario = round((float) $producto['precio'], 2);
-            $subTotal = round($precioUnitario * $cantidad, 2);
-
-            $itemsResueltos[] = [
-                'id_producto' => $idProducto,
-                'cantidad' => $cantidad,
-                'precio_unitario' => $precioUnitario,
-                'sub_total' => $subTotal,
-            ];
         }
 
         // Si envían total explícitamente como null, se respeta (útil para carrito inicial)
@@ -160,6 +106,61 @@ class OrdenController
         }
     }
 
+    public function agregarDetalle(int $idOrden, array $entrada): void
+    {
+        if ($idOrden <= 0) {
+            $this->responderJson(400, [
+                'ok' => false,
+                'mensaje' => 'ID de orden inválido.',
+            ]);
+            return;
+        }
+
+        $orden = $this->modelo->obtenerPorId($idOrden);
+        if (!$orden) {
+            $this->responderJson(404, [
+                'ok' => false,
+                'mensaje' => 'Orden no encontrada.',
+            ]);
+            return;
+        }
+
+        // Acepta un solo ítem en raíz ("id_producto" + "cantidad") o un arreglo en "items"
+        $itemsRaw = isset($entrada['items']) ? $entrada['items'] : [$entrada];
+        $itemsResueltos = $this->resolverItems($itemsRaw);
+        if ($itemsResueltos === null) {
+            return;
+        }
+
+        if (empty($itemsResueltos)) {
+            $this->responderJson(400, [
+                'ok' => false,
+                'mensaje' => 'Debes enviar id_producto y cantidad (o un arreglo items no vacío).',
+            ]);
+            return;
+        }
+
+        try {
+            $idsInsertados = [];
+            foreach ($itemsResueltos as $item) {
+                $idsInsertados[] = $this->modelo->agregarDetalle($idOrden, $item);
+            }
+
+            $actualizada = $this->modelo->obtenerPorId($idOrden);
+            $this->responderJson(200, [
+                'ok' => true,
+                'mensaje' => 'Detalle(s) agregado(s) y total actualizado correctamente.',
+                'ids_detalle' => $idsInsertados,
+                'data' => $actualizada,
+            ]);
+        } catch (Throwable $e) {
+            $this->responderJson(400, [
+                'ok' => false,
+                'mensaje' => 'No se pudo agregar el detalle a la orden.',
+            ]);
+        }
+    }
+
     public function actualizar(int $id, array $entrada): void
     {
         if ($id <= 0) {
@@ -176,6 +177,12 @@ class OrdenController
                 'ok' => false,
                 'mensaje' => 'Orden no encontrada.',
             ]);
+            return;
+        }
+
+        // Si el PATCH trae "items" o "id_producto", agrega detalles y recalcula el total
+        if (array_key_exists('items', $entrada) || array_key_exists('id_producto', $entrada)) {
+            $this->agregarDetalle($id, $entrada);
             return;
         }
 
@@ -268,6 +275,74 @@ class OrdenController
                 'mensaje' => 'No se pudo eliminar la orden.',
             ]);
         }
+    }
+
+    /**
+     * Valida y resuelve precios/subtotales desde la base de datos para uno o varios ítems.
+     * Devuelve null si respondió con error HTTP 400.
+     */
+    private function resolverItems(mixed $itemsRaw): ?array
+    {
+        if (!is_array($itemsRaw)) {
+            $this->responderJson(400, [
+                'ok' => false,
+                'mensaje' => 'items debe ser un arreglo.',
+            ]);
+            return null;
+        }
+
+        $itemsResueltos = [];
+        foreach ($itemsRaw as $indice => $item) {
+            if (!is_array($item)) {
+                $this->responderJson(400, [
+                    'ok' => false,
+                    'mensaje' => "El elemento en items[$indice] no es válido.",
+                ]);
+                return null;
+            }
+
+            $idProdRaw = $item['id_producto'] ?? null;
+            $cantRaw = $item['cantidad'] ?? null;
+
+            if (!is_numeric($idProdRaw) || (int) $idProdRaw <= 0) {
+                $this->responderJson(400, [
+                    'ok' => false,
+                    'mensaje' => "id_producto inválido en items[$indice].",
+                ]);
+                return null;
+            }
+            if (!is_numeric($cantRaw) || (int) $cantRaw <= 0 || (int) $cantRaw != $cantRaw) {
+                $this->responderJson(400, [
+                    'ok' => false,
+                    'mensaje' => "cantidad debe ser un entero mayor que 0 en items[$indice].",
+                ]);
+                return null;
+            }
+
+            $idProducto = (int) $idProdRaw;
+            $cantidad = (int) $cantRaw;
+
+            $producto = $this->modelo->obtenerProductoActivo($idProducto);
+            if (!$producto) {
+                $this->responderJson(400, [
+                    'ok' => false,
+                    'mensaje' => "El producto con id_producto $idProducto no existe.",
+                ]);
+                return null;
+            }
+
+            $precioUnitario = round((float) $producto['precio'], 2);
+            $subTotal = round($precioUnitario * $cantidad, 2);
+
+            $itemsResueltos[] = [
+                'id_producto' => $idProducto,
+                'cantidad' => $cantidad,
+                'precio_unitario' => $precioUnitario,
+                'sub_total' => $subTotal,
+            ];
+        }
+
+        return $itemsResueltos;
     }
 
     private function esFechaValida(string $fecha): bool

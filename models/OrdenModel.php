@@ -105,6 +105,56 @@ class OrdenModel
         return $fila ?: null;
     }
 
+    public function recalcularTotalOrden(int $idOrden): float
+    {
+        $sql = 'SELECT COALESCE(SUM(sub_total), 0)
+                FROM detalle_orden
+                WHERE id_orden = :id_orden';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id_orden' => $idOrden]);
+        $total = round((float) $stmt->fetchColumn(), 2);
+
+        $sqlUpdate = 'UPDATE ordenes
+                      SET total = :total
+                      WHERE id_orden = :id_orden';
+        $stmtUpdate = $this->db->prepare($sqlUpdate);
+        $stmtUpdate->execute([
+            ':total' => $total,
+            ':id_orden' => $idOrden,
+        ]);
+
+        return $total;
+    }
+
+    public function agregarDetalle(int $idOrden, array $itemResuelto): int
+    {
+        $this->db->beginTransaction();
+
+        try {
+            $sqlDetalle = 'INSERT INTO detalle_orden (id_orden, id_producto, cantidad, precio_unitario, sub_total)
+                           VALUES (:id_orden, :id_producto, :cantidad, :precio_unitario, :sub_total)';
+            $stmtDetalle = $this->db->prepare($sqlDetalle);
+            $stmtDetalle->execute([
+                ':id_orden' => $idOrden,
+                ':id_producto' => $itemResuelto['id_producto'],
+                ':cantidad' => $itemResuelto['cantidad'],
+                ':precio_unitario' => $itemResuelto['precio_unitario'],
+                ':sub_total' => $itemResuelto['sub_total'],
+            ]);
+
+            $idDetalle = (int) $this->db->lastInsertId();
+            $this->recalcularTotalOrden($idOrden);
+
+            $this->db->commit();
+            return $idDetalle;
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     public function crearConDetalles(array $datosOrden, array $itemsResueltos, bool $totalEsNull): int
     {
         $this->db->beginTransaction();
