@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../controllers/CategoriaController.php';
+$pdo = obtenerConexion();
 
 $id = $id ?? (isset($_GET['id']) && $_GET['id'] !== '' ? $_GET['id'] : null);
 $metodo = $_SERVER['REQUEST_METHOD'] ?? 'GET';

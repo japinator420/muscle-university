@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../models/SuscripcionModel.php';
 require_once __DIR__ . '/../controllers/SuscripcionController.php';
+$pdo = obtenerConexion();
 
 $modelo = new SuscripcionModel($pdo);
 $controlador = new SuscripcionController($modelo);

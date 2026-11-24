@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../models/UsuarioModel.php';
 require_once __DIR__ . '/../controllers/UsuarioController.php';
+$pdo = obtenerConexion();
 
 $modelo = new UsuarioModel($pdo);
 $controlador = new UsuarioController($modelo);

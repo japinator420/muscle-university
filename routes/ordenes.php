@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../models/OrdenModel.php';
 require_once __DIR__ . '/../controllers/OrdenController.php';
+$pdo = obtenerConexion();
 
 $modelo = new OrdenModel($pdo);
 $controlador = new OrdenController($modelo);
